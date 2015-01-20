@@ -1,7 +1,8 @@
-#include <LiquidCrystal.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 // initialize the library with the numbers of the interface pins
-LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 const int hAddPin = 8;
 const int hDecPin = 7;
@@ -35,7 +36,6 @@ void setup() {
 }
 
 void loop() {
-  
   hCount += wasButtonPressed(hAddPin, hAddOldState, hAddState) ? 1 : 0;
   hCount -= wasButtonPressed(hDecPin, hDecOldState, hDecState) ? 1 : 0;
 
@@ -69,7 +69,7 @@ void printGoal(int goals, int x, int y)
     lcd.print(" ");
 
   lcd.print(goals);
-}
+ }
 
 boolean wasButtonPressed(int pin, int &old, int &state) 
 {
