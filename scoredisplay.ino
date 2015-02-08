@@ -4,6 +4,12 @@
 // initialize the library with the numbers of the interface pins
 LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
+const char texts[2][17] = {{"Eelis  -  Aatos"}, {"Aatos  -  Eelis"}};
+
+int textIndex = 0;
+bool set = false;
+unsigned long time = 0;
+
 const int hAddPin = 8;
 const int hDecPin = 7;
 
@@ -47,7 +53,7 @@ void loop() {
     
   //lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Eelis  -  Aatos");
+  lcd.print(texts[textIndex]);
   printGoal(hCount, 0, 1);
   printGoal(gCount, 10, 1);
 }
@@ -75,14 +81,31 @@ boolean wasButtonPressed(int pin, int &old, int &state)
 {
   state = digitalRead(pin);
   
-  if (old == 1 && state == 0)
-  {
+  if (pin == 10 && state == 1) {
+    if ((millis() - time) >= 1000) {
+      if (!set) {
+        textIndex = (textIndex > 0 ? 0 : 1);
+        set = true;
+      } else {
+        old = 0;
+      }
+      old = 0;
+      time = millis();
+      return false;
+    }
+//    lcd.print(millis()-time);
+  } else if (pin == 10) {
+    set = false;
+    time = millis();
+  }
+
+  if (old == 1 && state == 0) {
     old = state;
     return true;
   }
-  
+
   old = state;
-  
+
   return false;
 }
 
