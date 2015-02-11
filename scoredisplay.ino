@@ -6,9 +6,32 @@ LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 const char texts[2][17] = {{"Eelis  -  Aatos"}, {"Aatos  -  Eelis"}};
 
+const char TEAMS = 5;
+const char teams[TEAMS][8] = {
+  "Classic",
+  " Ilves ",
+  " KooVee",
+  " Eelis ",
+  " Aatos "
+};
+
 int textIndex = 0;
-bool set = false;
-unsigned long time = 0;
+
+enum availableButtons {
+    HOME_ADD,
+    HOME_DEC,
+    GUEST_ADD,
+    GUEST_DEC,
+    NUM_BUTTONS
+};
+
+enum display_mode {
+  SETUP,
+  RUN_GAME,
+  STOP_GAME
+};
+
+display_mode mode = SETUP;
 
 const int hAddPin = 8;
 const int hDecPin = 7;
@@ -16,20 +39,40 @@ const int hDecPin = 7;
 const int gAddPin = 10;
 const int gDecPin = 9;
 
+struct Button {
+  int pin;
+  int old_state;
+  unsigned long time_pressed;
+};
+
+Button buttons[4] = {
+  {hAddPin, 0, 0},
+  {hDecPin, 0, 0},
+  {gAddPin, 0, 0},
+  {gDecPin, 0, 0},
+};
+
+enum buttonStates {
+  NO_PRESS,
+  SHORT_PRESS,
+  LONG_PRESS,
+  PIN = 0,
+  OLD_STATE,
+  TIME
+};
+
 const int LIMIT = 999;
 
-int hAddState = 0;
-int hAddOldState = 0;
-int hDecState = 0;
-int hDecOldState = 0;
+struct Game {
+  char home_team_id;
+  char guest_team_id;
+  int hCount;
+  int gCount;
+};
 
-int gAddState = 0;
-int gAddOldState = 0;
-int gDecState = 0;
-int gDecOldState = 0;
+Game game = {0, 0};
 
-int hCount = 0;
-int gCount = 0;
+buttonStates buttonState(int pin);
 
 void setup() {
   // set up the LCD's number of columns and rows: 
@@ -39,23 +82,92 @@ void setup() {
   pinMode(hDecPin, INPUT);
   pinMode(gAddPin, INPUT);
   pinMode(gDecPin, INPUT);
+  
+  Serial.begin(9600);
 }
 
 void loop() {
-  hCount += wasButtonPressed(hAddPin, hAddOldState, hAddState) ? 1 : 0;
-  hCount -= wasButtonPressed(hDecPin, hDecOldState, hDecState) ? 1 : 0;
+  
+  switch(mode) {
+    case SETUP:
+      runSetupMode();
+      break;
+    case RUN_GAME:
+      runGame();
+      break;
+    case STOP_GAME:
+      runStopGame();
+      break;
+    default:
+      runError();
+  };
+}
 
-  gCount += wasButtonPressed(gAddPin, gAddOldState, gAddState) ? 1 : 0;
-  gCount -= wasButtonPressed(gDecPin, gDecOldState, gDecState) ? 1 : 0;
+void runGame() {    
+  for (char i = 0; i < NUM_BUTTONS; i++) {
+    buttonStates state = buttonState(i);
+    if (i == HOME_ADD) {
+      if (state == SHORT_PRESS) {
+        game.hCount += 1;
+        Serial.println("home add");
+      } else if (state == LONG_PRESS) {
+        mode = SETUP;
+        Serial.println("mode change");
+        lcd.clear();
+        return;
+      }
+    }
+    if (i == HOME_DEC) {
+      if (state == SHORT_PRESS) {
+        game.hCount -= 1;
+               Serial.println("home dec");
+      }
+    }
+    if (i == GUEST_ADD) {
+      if (state == SHORT_PRESS) {
+        game.gCount += 1;
+               Serial.println("guest add");
+      }
+    }
+    if (i == GUEST_DEC) {
+      if (state == SHORT_PRESS) {
+        game.gCount -= 1;
+               Serial.println("guest dec");
+      }
+    }
+  }
+  limitGoals(game.hCount);
+  limitGoals(game.gCount);
 
-  limitGoals(hCount);
-  limitGoals(gCount);
-    
-  //lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print(texts[textIndex]);
-  printGoal(hCount, 0, 1);
-  printGoal(gCount, 10, 1);
+  printTeams();
+  printGoal(game.hCount, 0, 1);
+  printGoal(game.gCount, 10, 1);
+}
+
+buttonStates buttonState(int pin)
+{
+  int state = digitalRead(buttons[pin].pin);
+//  Serial.print("pin: ");
+//  Serial.println(pin);
+//  Serial.print("state: ");
+//  Serial.println(state);
+  
+  enum buttonStates button = NO_PRESS;
+  
+  if (state == 1 && buttons[pin].old_state == 1) {
+    if ((millis() - buttons[pin].time_pressed) >= 1000) {
+      button = LONG_PRESS;
+      buttons[pin].time_pressed = millis();
+    }
+  } else if (state == 0 && buttons[pin].old_state == 1) {
+    button = SHORT_PRESS;
+    buttons[pin].time_pressed = millis();
+  } else {
+    buttons[pin].time_pressed = millis();
+  }
+  buttons[pin].old_state = state;
+  
+  return button;
 }
 
 void limitGoals(int &goals)
@@ -77,35 +189,48 @@ void printGoal(int goals, int x, int y)
   lcd.print(goals);
  }
 
-boolean wasButtonPressed(int pin, int &old, int &state) 
+void printTeams()
 {
-  state = digitalRead(pin);
+  lcd.setCursor(0,0);
+  lcd.print(teams[game.home_team_id]);
+  lcd.setCursor(8,0);
+  lcd.print("-");
+  lcd.print(teams[game.guest_team_id]);
+}
+
+void runSetupMode()
+{
+  buttonStates state = buttonState(HOME_ADD);
+  if (state == SHORT_PRESS) {
+    ;
+  } else if (state == LONG_PRESS) {
+    mode = RUN_GAME;
+    lcd.clear();
+    return;
+  }
   
-  if (pin == 10 && state == 1) {
-    if ((millis() - time) >= 1000) {
-      if (!set) {
-        textIndex = (textIndex > 0 ? 0 : 1);
-        set = true;
-      } else {
-        old = 0;
-      }
-      old = 0;
-      time = millis();
-      return false;
-    }
-//    lcd.print(millis()-time);
-  } else if (pin == 10) {
-    set = false;
-    time = millis();
+  state = buttonState(HOME_DEC);
+  if (state == SHORT_PRESS) {
+    game.home_team_id += 1;
+    if (game.home_team_id >= TEAMS)
+      game.home_team_id = 0;
+  }
+  state = buttonState(GUEST_DEC);
+  if (state == SHORT_PRESS) {
+    game.guest_team_id += 1;
+    if (game.guest_team_id >= TEAMS)
+      game.guest_team_id = 0;
   }
 
-  if (old == 1 && state == 0) {
-    old = state;
-    return true;
-  }
+    printTeams();  
+    lcd.setCursor(0, 1);
+    lcd.print("setup");
+}
 
-  old = state;
-
-  return false;
+void runStopGame()
+{
+}
+void runError()
+{
 }
 
